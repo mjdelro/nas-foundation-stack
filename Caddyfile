@@ -1,0 +1,19 @@
+{$JELLYFIN_HOSTNAME} {
+	tls internal
+	reverse_proxy jellyfin:8096
+}
+
+{$PIHOLE_HOSTNAME} {
+	tls internal
+	reverse_proxy pihole:80
+}
+
+{$PORTAINER_HOSTNAME} {
+	tls internal
+	reverse_proxy https://portainer:9443 {
+		transport http {
+			tls_insecure_skip_verify
+		}
+	}
+}
+
