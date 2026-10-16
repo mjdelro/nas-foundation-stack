@@ -1,18 +1,18 @@
 # NAS foundation stack
 
-A single Docker Compose project for a small home server:
+Run four common home-server services from one Docker Compose project:
 
-- Pi-hole v6 for network DNS filtering and its embedded dnsmasq-compatible DNS service
-- Jellyfin for media playback
-- Caddy for memorable local HTTPS addresses
-- Portainer CE for container management
+- Pi-hole v6 filters DNS and handles local records through its embedded dnsmasq-compatible service.
+- Jellyfin serves media from a read-only host directory.
+- Caddy gives each service a local HTTPS address.
+- Portainer CE provides a browser-based view of Docker.
 
-The base deployment works without a GPU. Optional Compose overlays enable Intel
-Quick Sync/VA-API or NVIDIA NVENC/NVDEC for Jellyfin.
+Jellyfin runs on the CPU by default. Optional Compose overlays enable Intel
+Quick Sync or VA-API, and NVIDIA NVENC/NVDEC.
 
-## Before deploying
+## Requirements
 
-You need:
+The host needs:
 
 - A Linux host with Docker Engine and Docker Compose v2
 - A static LAN address for the host
@@ -20,9 +20,9 @@ You need:
 - TCP ports 80 and 443 available on the host
 - An existing media directory readable by the chosen `PUID` and `PGID`
 
-Do not deploy this over an existing Pi-hole, Jellyfin, Caddy, or Portainer
-installation without first backing up its persistent data. This project uses
-bind-mounted data below `./data` so its state can be backed up directly.
+Back up the persistent data before replacing an existing Pi-hole, Jellyfin,
+Caddy, or Portainer installation. This project stores its state in bind mounts
+under `./data`.
 
 ## Configure
 
@@ -30,29 +30,29 @@ bind-mounted data below `./data` so its state can be backed up directly.
 cp .env.example .env
 ```
 
-Edit `.env` and set at least:
+Set these values in `.env`:
 
 - `SERVER_IP` to the server's static LAN address
 - `MEDIA_PATH` to the media directory on the host
 - `PIHOLE_PASSWORD` to a unique password
 - `PUID` and `PGID` to the account that can read the media directory
 
-Create the persistent directories and give Jellyfin ownership of its writable
-directories. Substitute the values selected for `PUID` and `PGID` if they are
-not `1000`:
+Create the persistent directories, then give Jellyfin ownership of its config
+and cache. Replace `1000:1000` if `.env` uses a different `PUID` or `PGID`:
 
 ```sh
 mkdir -p data/{caddy/config,caddy/data,jellyfin/cache,jellyfin/config,pihole,portainer}
 sudo chown -R 1000:1000 data/jellyfin
 ```
 
-Generate a password without placing it in shell history:
+This command generates a password without saving it in shell history:
 
 ```sh
 openssl rand -base64 32
 ```
 
-The `.env` file is ignored by Git. Do not commit it.
+Git ignores `.env`. Keep it out of commits and backups that other people can
+read.
 
 ## Start the stack
 
@@ -77,13 +77,13 @@ docker compose -f compose.yaml -f compose.nvidia.yaml config --quiet
 docker compose -f compose.yaml -f compose.nvidia.yaml up -d
 ```
 
-The NVIDIA option requires a working NVIDIA driver and NVIDIA Container
-Toolkit on the host. Confirm `nvidia-smi` works before starting the stack.
+The NVIDIA overlay requires a working NVIDIA driver and NVIDIA Container
+Toolkit. Run `nvidia-smi` on the host before starting the stack.
 
-## Put Pi-hole into service
+## Switch the network to Pi-hole
 
-The Compose project does not change your router automatically. First verify the
-container directly:
+The project does not change router settings. Test Pi-hole directly before
+advertising it to the rest of the network:
 
 ```sh
 docker compose ps
@@ -91,24 +91,26 @@ dig @SERVER_IP pi.hole
 dig @SERVER_IP watch.home.arpa
 ```
 
-Replace `SERVER_IP` with the address from `.env`. After those tests succeed,
-configure the router's LAN DHCP/DNS setting to advertise that address as its
-DNS server.
+Replace `SERVER_IP` with the address from `.env`. When both lookups succeed,
+set the router's LAN DHCP/DNS option to advertise that address as the DNS
+server.
 
-Do not point the Docker host itself exclusively at the new Pi-hole until the
-container has proven that it starts reliably after a reboot. Otherwise a
-container outage can prevent the host from resolving image registries.
+Wait until Pi-hole has survived a reboot before making it the Docker host's
+only resolver. If the container is unavailable, the host still needs to resolve
+image registries and package mirrors.
 
-Pi-hole v6 embeds the DNS service previously configured through standalone
-dnsmasq. Local service records are supplied through
-`FTLCONF_misc_dnsmasq_lines`. Extra dnsmasq-compatible files can be added under
-`dnsmasq.d/`.
+Pi-hole v6 includes its own dnsmasq-compatible DNS engine. The Compose file
+passes local service records through `FTLCONF_misc_dnsmasq_lines`. Add other
+dnsmasq-compatible files under `dnsmasq.d/`.
 
-DHCP service is deliberately omitted. Running DHCP from a bridged container
-requires additional network and capability decisions and can conflict with the
-router's existing DHCP server.
+This project leaves DHCP to the router. Running a second DHCP server can break
+client addressing, and a containerized DHCP server needs a different network
+configuration.
 
-## Open the services
+See the [Pi-hole Docker documentation](https://docs.pi-hole.net/docker/) for
+Pi-hole v6 settings and DHCP options.
+
+## Service addresses
 
 After Pi-hole is the LAN DNS server:
 
@@ -116,28 +118,33 @@ After Pi-hole is the LAN DNS server:
 - Pi-hole: `https://dns.home.arpa/admin/`
 - Portainer: `https://portainer.home.arpa`
 
-Caddy uses its internal certificate authority for these private names. Import
-this certificate into client trust stores to remove browser warnings:
+Caddy signs these private names with its internal certificate authority. Import
+the following root certificate into each client trust store to remove browser
+warnings:
 
 ```text
 data/caddy/data/caddy/pki/authorities/local/root.crt
 ```
 
-Treat the root certificate as public data, but never distribute the private key
-stored beside it.
+The root certificate is safe to distribute. The private key stored beside it
+is not.
 
 ## Jellyfin hardware acceleration
 
-The overlay only makes the GPU available to the container. In Jellyfin, open
-Dashboard, Playback, Transcoding and select the matching acceleration method:
+The overlays give the Jellyfin container access to the GPU. They do not change
+Jellyfin's playback settings. Open Dashboard, Playback, Transcoding and choose
+the matching method:
 
 - Intel: Quick Sync or VA-API
 - NVIDIA: NVENC
 
-Enable only codecs supported by the installed GPU. Test with a forced
-transcode and check Jellyfin's FFmpeg log before depending on it.
+Enable only the codecs supported by the installed GPU. Force a transcode and
+check Jellyfin's FFmpeg log before relying on hardware acceleration.
 
-## Operations
+See the [Jellyfin hardware acceleration guide](https://jellyfin.org/docs/general/post-install/transcoding/hardware-acceleration/)
+for vendor-specific setup and codec support.
+
+## Updates and backups
 
 Update and recreate the containers:
 
@@ -146,7 +153,7 @@ docker compose pull
 docker compose up -d
 ```
 
-For a GPU deployment, include its overlay in every Compose command.
+Include the same GPU overlay in every Compose command used for that deployment.
 
 View status and recent logs:
 
@@ -155,7 +162,7 @@ docker compose ps
 docker compose logs --tail=100
 ```
 
-Back up these directories while the relevant container is stopped:
+Stop the relevant container before backing up its directory:
 
 ```text
 data/pihole
@@ -164,17 +171,17 @@ data/portainer
 data/caddy
 ```
 
-Portainer is part of the project it manages. Keep command-line Docker access
-available: deleting or breaking the entire project also removes the Portainer
-UI until the project is started again from the command line.
+Portainer belongs to the project it manages. Keep command-line Docker access
+available because removing the project also removes the Portainer interface.
+Start the project from the command line to recover it.
 
-## Security notes
+## Security
 
-- Keep these administration services restricted to the trusted LAN.
-- Do not forward Pi-hole, Portainer, or Caddy administration ports from the internet.
+- Restrict the administration services to a trusted LAN.
+- Do not forward this stack's DNS or web ports from the internet.
 - Protect `.env` and the complete `data/` directory as sensitive backup material.
 - The Docker socket gives Portainer administrative control of the host.
-- Pin image tags or digests before using the project in a change-controlled environment.
+- Pin image tags or digests before using the project where updates require review.
 
 ## Port conflicts
 
@@ -185,7 +192,7 @@ anything:
 sudo ss -lntup '( sport = :53 )'
 ```
 
-On systems using `systemd-resolved`, follow the operating system's documented
-procedure for freeing port 53. Do not disable the resolver remotely unless an
-alternate working resolver is already configured.
+On systems using `systemd-resolved`, follow the operating system's instructions
+for freeing port 53. Do not disable the resolver during a remote session unless
+the host already has another working resolver.
 
