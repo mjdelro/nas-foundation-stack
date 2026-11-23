@@ -1,4 +1,19 @@
-# NAS foundation stack
+<p align="center">
+  <img src="assets/icon.svg" alt="NAS Foundation Stack Icon" width="104" height="104" />
+</p>
+
+<h1 align="center">NAS Foundation Stack</h1>
+
+<p align="center">Reusable Docker Compose stack for Pi-hole v6, Jellyfin, Caddy, and Portainer.</p>
+
+<p align="center">
+  <a href="https://github.com/mjdelro/nas-foundation-stack/releases/latest"><img src="https://img.shields.io/github/v/release/mjdelro/nas-foundation-stack?style=flat-square&color=14b8a6" alt="" /></a>
+  <img src="https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker&logoColor=white" alt="" />
+  <img src="https://img.shields.io/badge/Pi--hole%20%7C%20Jellyfin%20%7C%20Caddy%20%7C%20Portainer-0d9488?style=flat-square" alt="" />
+  <img src="https://img.shields.io/github/license/mjdelro/nas-foundation-stack?style=flat-square&color=64748b" alt="" />
+</p>
+
+---
 
 Run four common home-server services from one Docker Compose project:
 
